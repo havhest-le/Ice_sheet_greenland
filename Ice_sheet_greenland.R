@@ -54,16 +54,36 @@ date = as.POSIXct(glue("{snow$year}-01-01"), tz = "GMT") + snow$day*24*60*60
 data <- full_join(snow, run, by = c("month", "year"))
 data <- data[, c(2,3,1,4)]
 data <- rename(data, med_snow = med.x, med_run = med.y)
+data$med_snow <- data$med_snow*24*60*60*100
+data$med_run <- data$med_run*24*60*60*1000
 data$diff <- ((data$med_snow-data$med_run))
+head(data)
 
-plot_dif <- 
-  ggplot(data = data, mapping = aes(x = year, y = diff))+
-  geom_smooth(stat = "smooth", se = T, size = 1) +
-  theme_minimal()
-  
-  
-  
-
-
-
+for(i in 1:12){
+    if(i == 1){
+      data$diff*31
+    } else if(i == 2){
+      data$diff*28
+    } else if(i == 3){
+      data$diff*28
+    } else if(i == 4){
+      data$diff*30
+    } else if(i == 5){
+      data$diff*31
+    } else if(i == 6){
+      data$diff*30
+    } else if(i == 7){
+      data$diff*31
+    } else if(i == 8){
+      data$diff*31
+    } else if(i == 9){
+      data$diff*30
+    } else if(i == 10){
+      data$diff*31
+    } else if(i == 11){
+      data$diff*30
+    } else if(i == 12){
+      data$diff*31}
+}
+head(data)
 
