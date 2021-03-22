@@ -57,12 +57,14 @@ data <- rename(data, med_snow = med.x, med_run = med.y)
 data$med_snow <- data$med_snow*24*60*60*100
 data$med_run <- data$med_run*24*60*60*1000
 data$diff <- ((data$med_snow-data$med_run))
-data_by_year <- data %>%
-  group_by(year) %>%
-  summarise("med_diff" = median(diff, na.rm = TRUE),
-            "med_snow" = median(med_snow, na.rm = TRUE),
-            "med_run" = median(med_run, na.rm = TRUE))
-head(data_by_year)
+for(i in 1:nrow(data)){
+  if(nchar(data$month[i])== 1){
+    data$date[i] <- paste(data$year[i],data$month[i],sep="-0")
+  }else{
+    data$date[i] <- paste(data$year[i],data$month[i],sep="-")
+  }
+}
+head(data)
 
 for(i in 1:12) {
     if(i == 1){
@@ -91,7 +93,12 @@ for(i in 1:12) {
       data$diff*31}
 }
 
-
+data_by_year <- data %>%
+  group_by(year) %>%
+  summarise("med_diff" = median(diff, na.rm = TRUE),
+            "med_snow" = median(med_snow, na.rm = TRUE),
+            "med_run" = median(med_run, na.rm = TRUE))
+head(data_by_year)
 
 ggplot()+
   geom_line(mapping = aes(x = year, y = med_diff), data = data_by_year)+
