@@ -57,9 +57,14 @@ data <- rename(data, med_snow = med.x, med_run = med.y)
 data$med_snow <- data$med_snow*24*60*60*100
 data$med_run <- data$med_run*24*60*60*1000
 data$diff <- ((data$med_snow-data$med_run))
-head(data)
+data_by_year <- data %>%
+  group_by(year) %>%
+  summarise("med_diff" = median(diff, na.rm = TRUE),
+            "med_snow" = median(med_snow, na.rm = TRUE),
+            "med_run" = median(med_run, na.rm = TRUE))
+head(data_by_year)
 
-for(i in 1:12){
+for(i in 1:12) {
     if(i == 1){
       data$diff*31
     } else if(i == 2){
@@ -82,8 +87,33 @@ for(i in 1:12){
       data$diff*31
     } else if(i == 11){
       data$diff*30
-    } else if(i == 12){
+    } else {
       data$diff*31}
 }
-head(data)
 
+
+
+ggplot()+
+  geom_line(mapping = aes(x = year, y = med_diff), data = data_by_year)+
+  geom_line(mapping = aes(x = year, y = med_snow), data = data_by_year)+
+  geom_line(mapping = aes(x = year, y = med_run, ), data = data_by_year)+
+  scale_x_continuous(breaks = date)+
+  theme_minimal()
+  
+  
+  
+ggplot(data = data_by_year, mapping = aes(x = year, y = med_diff))+
+  geom_line(color = "69b3a2")+
+  geom_point(color = "69b3a2", size = 2)+
+  theme_minimal()+
+  ylim(c(-1000, 200))
+  
+ggplot(data = data_by_year, mapping = aes(x = year, y = med_snow))+
+  geom_line(color = "69b3a2")+
+  geom_point(color = "69b3a2", size = 2)+
+  theme_minimal()
+
+ggplot(data = data_by_year, mapping = aes(x = year, y = med_run))+
+  geom_line(color = "69b3a2")+
+  geom_point(color = "69b3a2", size = 2)+
+  theme_minimal()
