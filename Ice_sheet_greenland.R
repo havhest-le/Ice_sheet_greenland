@@ -21,6 +21,7 @@ library(cowplot)
 library(ggpubr)
 library(plotrix)
 library(glue)
+library(lubridate)
 
 ####
 # Input data ####
@@ -39,16 +40,14 @@ run <- do.call("rbind", lapply(1:length(files_runoff), function(x){
   data.frame(med = med, month = as.numeric(substring(names(tep), 7,8)),
              year = as.numeric(substring(names(tep), 2,5)))}))
 head(run)
-date = as.POSIXct(glue("{run$year}-01-01"), tz = "GMT") + run$day*24*60*60
 
 
 snow <- do.call("rbind", lapply(1:length(files_snowfall), function(z){
   tep <- raster(files_snowfall[z])
   med <- cellStats(crop(tep, greenland_shape), stat = 'mean', na.rm = TRUE)
-  data.frame(med = med, month = as.numeric(substring(names(tep), 10,12)),
+  data.frame(med = med, month = as.numeric(substring(names(tep), 9,13)),
              year = as.numeric(substring(names(tep),4,7)))}))
 head(snow)
-date = as.POSIXct(glue("{snow$year}-01-01"), tz = "GMT") + snow$day*24*60*60
 
 
 data <- full_join(snow, run, by = c("month", "year"))
@@ -67,12 +66,12 @@ for(i in 1:nrow(data)){
 head(data)
 
 
-data_by_year <- data %>%
+data_by_year_diff <- data %>%
   group_by(year) %>%
   summarise("med_diff" = median(diff, na.rm = TRUE))
-head(data_by_year)
+head(data_by_year_diff)
 
-ggplot(data = data_by_year, mapping = aes(x = year, y = med_diff)) +
+ggplot(data = data_by_year_diff, mapping = aes(x = year, y = med_diff)) +
   geom_bar(stat = 'identity', width = 0.6, colour = "black", fill = "darkseagreen1") +
   geom_text(aes(label = round(med_diff, digits = 0)), size = 2.5, vjust = -0.8) +
   theme_minimal()+
@@ -103,41 +102,76 @@ ggplot(data = data_years) +
 
 
 
-for(i in 1:12) {
-    if(i == 1){
-      data$diff*31
-    } else if(i == 2){
-      data$diff*28
-    } else if(i == 3){
-      data$diff*28
-    } else if(i == 4){
-      data$diff*30
-    } else if(i == 5){
-      data$diff*31
-    } else if(i == 6){
-      data$diff*30
-    } else if(i == 7){
-      data$diff*31
-    } else if(i == 8){
-      data$diff*31
-    } else if(i == 9){
-      data$diff*30
-    } else if(i == 10){
-      data$diff*31
-    } else if(i == 11){
-      data$diff*30
-    } else {
-      data$diff*31}
-}
+data_by_year <- data %>%
+  group_by(year) %>%
+  summarise("med_diff" = median(diff, na.rm = TRUE),
+            "med_snow" = median(med_snow, na.rm = TRUE), 
+            "med_run" = median(med_run, na.rm = TRUE))
+head(data_by_year)
 
 
 ggplot()+
-  geom_line(mapping = aes(x = year, y = med_diff), data = data_by_year)+
-  geom_line(mapping = aes(x = year, y = med_snow), data = data_by_year)+
-  geom_line(mapping = aes(x = year, y = med_run, ), data = data_by_year)+
-  scale_x_continuous(breaks = date)+
+  geom_line(mapping = aes(x = year, y = med_diff, col = "med_diff"), data = data_by_year)+
+  geom_line(mapping = aes(x = year, y = med_snow, col = "med_snow"), data = data_by_year)+
+  geom_line(mapping = aes(x = year, y = med_run, col = "med_run"), data = data_by_year)+
   theme_minimal()
-  
+
+ggplot()+
+  geom_line(mapping = aes(x = tt, y = diff, col = "diff"), data = data_tt)+
+  geom_line(mapping = aes(x = tt, y = med_snow, col = "med_snow"), data = data_tt)+
+  geom_line(mapping = aes(x = tt, y = med_run, col = "med_run"), data = data_tt)+
+  theme_minimal()
+
+ggplot(data = data_by_year, mapping = aes(x = year, y = med_diff)) +
+  geom_point()+
+  geom_line(color = "69b3a2")
+
+ggplot(data = data_by_year, mapping = aes(x = year, y = med_run))+
+  geom_point()+
+  geom_line(color = "69b3a2")
+
+
+tt <- 1:252
+data_tt <- data.frame(data, tt)
+ggplot()+
+  geom_line(mapping = aes(x = tt, y = diff, col = "diff"), data = data_tt)+
+  geom_line(mapping = aes(x = tt, y = med_snow, col = "med_snow"), data = data_tt)+
+  geom_line(mapping = aes(x = tt, y = med_run, col = "med_run"), data = data_tt)+
+  theme_minimal()
+
+
+
+
+
+# for(i in 1:nrow(data)) {
+#     if(i == 1){
+#       data$diff <- data$diff*31
+#     } else if(i == 2){
+#       data$diff <- data$diff*28
+#     } else if(i == 3){
+#       data$diff <- data$diff*28
+#     } else if(i == 4){
+#       data$diff <- data$diff*30
+#     } else if(i == 5){
+#       data$diff <- data$diff*31
+#     } else if(i == 6){
+#       data$diff <-  data$diff*30
+#     } else if(i == 7){
+#       data$diff <- data$diff*31
+#     } else if(i == 8){
+#       data$diff <- data$diff*31
+#     } else if(i == 9){
+#       data$diff <-  data$diff*30
+#     } else if(i == 10){
+#       data$diff <-  data$diff*31
+#     } else if(i == 11){
+#       data$diff <-  data$diff*30
+#     } else {
+#       data$diff <- data$diff*31}
+# }
+# head(data)
+
+
   
   
 ggplot(data = data_by_year, mapping = aes(x = year, y = med_diff))+
@@ -145,13 +179,3 @@ ggplot(data = data_by_year, mapping = aes(x = year, y = med_diff))+
   geom_point(color = "69b3a2", size = 2)+
   theme_minimal()+
   ylim(c(-1000, 200))
-  
-ggplot(data = data_by_year, mapping = aes(x = year, y = med_snow))+
-  geom_line(color = "69b3a2")+
-  geom_point(color = "69b3a2", size = 2)+
-  theme_minimal()
-
-ggplot(data = data_by_year, mapping = aes(x = year, y = med_run))+
-  geom_line(color = "69b3a2")+
-  geom_point(color = "69b3a2", size = 2)+
-  theme_minimal()
