@@ -66,6 +66,43 @@ for(i in 1:nrow(data)){
 }
 head(data)
 
+
+data_by_year <- data %>%
+  group_by(year) %>%
+  summarise("med_diff" = median(diff, na.rm = TRUE))
+head(data_by_year)
+
+ggplot(data = data_by_year, mapping = aes(x = year, y = med_diff)) +
+  geom_bar(stat = 'identity', width = 0.6, colour = "black", fill = "darkseagreen1") +
+  geom_text(aes(label = round(med_diff, digits = 0)), size = 2.5, vjust = -0.8) +
+  theme_minimal()+
+  labs(title = "The averrage mass balance of greenland ice sheet")+
+  xlab("Year") +
+  ylab("Median of net balance in mm/month") +
+  theme(plot.title = element_text(size = 20, hjust = 0.5))
+
+
+
+data_years <- data %>%
+    filter(year == 2000 | year == 2003 | year == 2005 | year == 2008 | 
+           year == 2011 | year == 2012 | year == 2015 | year == 2018 |
+           year == 2020)
+data_years$month <- as.numeric(data_years$month)
+data_years$diff <- as.numeric(data_years$diff)
+data_years$year <- factor(data_years$year)
+ggplot(data = data_years) + 
+  geom_line(aes(x = month, y = diff, color = year))+ 
+  scale_x_continuous(breaks = 1:12)+
+  theme_minimal()+
+  labs(title = "The mass balance of greenland ice sheet")+
+  xlab("month") +
+  ylab("The median of net balance per month in mm/month") +
+  theme(plot.title = element_text(size = 20, hjust = 0.5),
+        legend.title = element_text(size = 12, vjust = 1),
+        legend.text = element_text(size = 8, vjust = 0.75))
+
+
+
 for(i in 1:12) {
     if(i == 1){
       data$diff*31
@@ -93,12 +130,6 @@ for(i in 1:12) {
       data$diff*31}
 }
 
-data_by_year <- data %>%
-  group_by(year) %>%
-  summarise("med_diff" = median(diff, na.rm = TRUE),
-            "med_snow" = median(med_snow, na.rm = TRUE),
-            "med_run" = median(med_run, na.rm = TRUE))
-head(data_by_year)
 
 ggplot()+
   geom_line(mapping = aes(x = year, y = med_diff), data = data_by_year)+
