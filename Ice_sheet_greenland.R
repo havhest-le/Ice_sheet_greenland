@@ -27,42 +27,53 @@ library(lubridate)
 # Input data ####
 ####
 
-setwd("C:/Users/Vivi/Documents/Uni/5. Semester/Wasser/Daten/Shape")
-greenland_shape <- readOGR(".", layer = "greenland_south")
-plot(greenland_shape)
+setwd("C:/Users/Vivi/Documents/Uni/5. Semester/Wasser/Daten")
+# setwd("~/Google Drive/Shared/Daten/")
+# greenland_shape <- readOGR("greenland_south/greenland_south.shp", layer = "greenland_south")
+# plot(greenland_shape)
 
-files_runoff <- list.files(path = "C:/Users/Vivi/Documents/Uni/5. Semester/Wasser/Daten/Runoff", pattern = "*.tif", all.files = T, full.names = T)
-files_snowfall <- list.files(path = "C:/Users/Vivi/Documents/Uni/5. Semester/Wasser/Daten/Snowfall", pattern = "*.tif", all.files = T, full.names = T)
+map <- st_as_sfc(rnaturalearthdata::countries50)
+ext <- st_as_sfc(as(extent(c(-55, -25, 55, 69)), "SpatialPolygons")) %>% st_set_crs(st_crs(map))
+greenland <- as(st_intersection(map, ext), "Spatial")
+plot(greenland)
+catch <- read.table("grndrainagesystems_ekholm.txt", skip = 50)
+catch5 <- subset(catch, V1==5.0)
+  catch5$V3 <- ifelse(catch5$V3>180, catch5$V3-360, catch5$V3)
+
+jpeg("catchment.jpeg", width = 1000, height = 1000)  
+plot(greenland)
+title("Catchment 5.0 of South Greenland", cex.main= 4, line = -4)
+poly5 <- st_sfc(st_polygon(list(as.matrix(catch5[,3:2]))), crs = 4326)
+plot(poly5, col = "steelblue4", add = T)
+poly_run <- st_buffer(poly5, 0.4)
+plot(poly_run, add = T, col = alpha("skyblue3", 0.35))
+legend("right", legend = c("Catchment 5.0", "Buffer for runoff"),
+       col = c("steelblue4", "skyblue3"), pch = c(15,15), pt.cex = 3,  bty = "n", cex = 3)
+dev.off()  
+
+
+files_runoff   <- list.files(path = "runoff", pattern = "*.tif", recursive = TRUE, full.names = T)
+files_snowfall <- list.files(path = "Snowfall", pattern = "*.tif", recursive = TRUE, full.names = T)
 
 run <- do.call("rbind", lapply(1:length(files_runoff), function(x){
-  tep <- raster(files_runoff[x])
-  med <- cellStats(crop(tep, greenland_shape), stat = 'mean', na.rm = TRUE)
-  data.frame(med = med, month = as.numeric(substring(names(tep), 7,8)),
-             year = as.numeric(substring(names(tep), 2,5)))}))
+  tep_run <- raster(files_runoff[x])
+  med <- sum(crop(tep_run, as(poly_run, "Spatial"))[], na.rm = T)
+  data.frame(med = med, month = as.numeric(substring(names(tep_run), 7,8)),
+             year = as.numeric(substring(names(tep_run), 2,5)))}))
 head(run)
-
 
 snow <- do.call("rbind", lapply(1:length(files_snowfall), function(z){
   tep <- raster(files_snowfall[z])
-  med <- cellStats(crop(tep, greenland_shape), stat = 'mean', na.rm = TRUE)
-  data.frame(med = med, month = as.numeric(substring(names(tep), 9,13)),
-             year = as.numeric(substring(names(tep),4,7)))}))
+  med <- sum(crop(tep, as(poly5, "Spatial"))[], na.rm = T)
+  data.frame(med = med, month = as.numeric(substring(names(tep), 9,10)),
+             year = as.numeric(substring(names(tep), 4,7)))}))
 head(snow)
 
 
-data <- full_join(snow, run, by = c("month", "year"))
-data <- data[, c(2,3,1,4)]
-data <- rename(data, med_snow = med.x, med_run = med.y)
-data$med_snow <- data$med_snow*24*60*60*100
-data$med_run <- data$med_run*24*60*60*1000
+data <- full_join(snow, run, by = c("month", "year"))[, c(2,3,1,4)]
+names(data)[3:4] <- c("med_snow", "med_run")
 data$diff <- ((data$med_snow-data$med_run))
-for(i in 1:nrow(data)){
-  if(nchar(data$month[i])== 1){
-    data$date[i] <- paste(data$year[i],data$month[i],sep="-0")
-  }else{
-    data$date[i] <- paste(data$year[i],data$month[i],sep="-")
-  }
-}
+data$date <- as.POSIXct(glue("{data$year}-{data$month}-15"), tz = "GMT")
 head(data)
 
 
@@ -71,34 +82,36 @@ data_by_year_diff <- data %>%
   summarise("med_diff" = median(diff, na.rm = TRUE))
 head(data_by_year_diff)
 
-ggplot(data = data_by_year_diff, mapping = aes(x = year, y = med_diff)) +
-  geom_bar(stat = 'identity', width = 0.6, colour = "black", fill = "darkseagreen1") +
-  geom_text(aes(label = round(med_diff, digits = 0)), size = 2.5, vjust = -0.8) +
+
+pos_bal <- data_by_year_diff %>%
+  group_by(year) %>%
+  filter(year == "2002" | year == "2006" | year == "2009" | year == "2011" | 
+         year == "2014" | year == "2018")
+head(pos_bal)
+
+neg_bal <- data_by_year_diff %>%
+  group_by(year) %>%
+  filter(year == "2000" | year == "2001" | year == "2005" | year == "2008" | 
+           year == "2012")
+head(neg_bal)
+
+
+colors_1 <- c("smaller balance" = "firebrick3", "taller balance" = "deepskyblue3")
+ggplot() +
+  geom_bar(data = data_by_year_diff, mapping = aes(x = year, y = med_diff, fill = med_diff), 
+           stat = 'identity', width = 0.6, colour = "black", fill = "white", show.legend = FALSE)+
+  geom_bar(data = pos_bal, mapping = aes(x = year, y = med_diff, fill = "smaller balance"),
+           stat = 'identity', width = 0.6, colour = "black", show.legend = TRUE) +
+  geom_bar(data = neg_bal, mapping = aes(x = year, y = med_diff, fill = "taller balance"),
+           stat = 'identity', width = 0.6, colour = "black", show.legend = TRUE) +
+  scale_fill_manual(values = colors_1) +
   theme_minimal()+
-  labs(title = "The averrage mass balance of greenland ice sheet")+
+  labs(title = "The averrage mass balance of greenland ice sheet", fill = "balance")+
   xlab("Year") +
-  ylab("Median of net balance in mm/month") +
-  theme(plot.title = element_text(size = 20, hjust = 0.5))
-
-
-
-data_years <- data %>%
-    filter(year == 2000 | year == 2003 | year == 2005 | year == 2008 | 
-           year == 2011 | year == 2012 | year == 2015 | year == 2018 |
-           year == 2020)
-data_years$month <- as.numeric(data_years$month)
-data_years$diff <- as.numeric(data_years$diff)
-data_years$year <- factor(data_years$year)
-ggplot(data = data_years) + 
-  geom_line(aes(x = month, y = diff, color = year))+ 
-  scale_x_continuous(breaks = 1:12)+
-  theme_minimal()+
-  labs(title = "The mass balance of greenland ice sheet")+
-  xlab("month") +
-  ylab("The median of net balance per month in mm/month") +
-  theme(plot.title = element_text(size = 20, hjust = 0.5),
-        legend.title = element_text(size = 12, vjust = 1),
-        legend.text = element_text(size = 8, vjust = 0.75))
+  ylab("Median of net balance [kg/s]") +
+  theme(plot.title = element_text(size = 18, hjust = 0.5),
+        legend.title = element_text(size = 10, vjust = 0.5),
+        legend.text = element_text(size = 8, vjust = 0.5))
 
 
 
@@ -110,72 +123,152 @@ data_by_year <- data %>%
 head(data_by_year)
 
 
-ggplot()+
-  geom_line(mapping = aes(x = year, y = med_diff, col = "med_diff"), data = data_by_year)+
-  geom_line(mapping = aes(x = year, y = med_snow, col = "med_snow"), data = data_by_year)+
-  geom_line(mapping = aes(x = year, y = med_run, col = "med_run"), data = data_by_year)+
-  theme_minimal()
+colors_2 <- c("NBW" = "firebrick4", "snowfall" = "mediumspringgreen", "runoff" = "dodgerblue4")
+# data_by_year$year <- as.numeric(data_by_year$year)
+ggplot() +
+  geom_line(mapping = aes(x = year, y = med_diff, color = "NBW"), data = data_by_year, 
+             size = 1) +
+  geom_line(mapping = aes(x = year, y = med_snow, color = "snowfall"), data = data_by_year,
+            size = 1) +
+  geom_line(mapping = aes(x = year, y = med_run, color = "runoff"), data = data_by_year, 
+            size = 1) +
+  scale_color_manual(values = colors_2) +
+  theme_minimal() +
+  labs(title = "The mass balance of greenland ice sheet", colour = "Legend") +
+  xlab("year") +
+  ylab("Median of NMB [kg/s]") +
+  theme(plot.title = element_text(size = 20, hjust = 0.5),
+        legend.title = element_text(size = 10, vjust = 1),
+        legend.text = element_text(size = 8, vjust = 0.5))
 
-ggplot()+
-  geom_line(mapping = aes(x = tt, y = diff, col = "diff"), data = data_tt)+
-  geom_line(mapping = aes(x = tt, y = med_snow, col = "med_snow"), data = data_tt)+
-  geom_line(mapping = aes(x = tt, y = med_run, col = "med_run"), data = data_tt)+
-  theme_minimal()
+
+
 
 ggplot(data = data_by_year, mapping = aes(x = year, y = med_diff)) +
   geom_point()+
-  geom_line(color = "69b3a2")
+  geom_line(color = "69b3a2")+
+  theme_minimal()+
+  labs(title = "The netto mass balance") +
+  xlab("year") +
+  ylab("Median of NMB [kg/s]") +
+  theme(plot.title = element_text(size = 20, hjust = 0.5),
+        legend.title = element_text(size = 10, vjust = 1),
+        legend.text = element_text(size = 8, vjust = 0.5))
 
 ggplot(data = data_by_year, mapping = aes(x = year, y = med_run))+
   geom_point()+
-  geom_line(color = "69b3a2")
-
-
-tt <- 1:252
-data_tt <- data.frame(data, tt)
-ggplot()+
-  geom_line(mapping = aes(x = tt, y = diff, col = "diff"), data = data_tt)+
-  geom_line(mapping = aes(x = tt, y = med_snow, col = "med_snow"), data = data_tt)+
-  geom_line(mapping = aes(x = tt, y = med_run, col = "med_run"), data = data_tt)+
-  theme_minimal()
-
-
-
-
-
-# for(i in 1:nrow(data)) {
-#     if(i == 1){
-#       data$diff <- data$diff*31
-#     } else if(i == 2){
-#       data$diff <- data$diff*28
-#     } else if(i == 3){
-#       data$diff <- data$diff*28
-#     } else if(i == 4){
-#       data$diff <- data$diff*30
-#     } else if(i == 5){
-#       data$diff <- data$diff*31
-#     } else if(i == 6){
-#       data$diff <-  data$diff*30
-#     } else if(i == 7){
-#       data$diff <- data$diff*31
-#     } else if(i == 8){
-#       data$diff <- data$diff*31
-#     } else if(i == 9){
-#       data$diff <-  data$diff*30
-#     } else if(i == 10){
-#       data$diff <-  data$diff*31
-#     } else if(i == 11){
-#       data$diff <-  data$diff*30
-#     } else {
-#       data$diff <- data$diff*31}
-# }
-# head(data)
-
-
-  
-  
-ggplot(data = data_by_year, mapping = aes(x = year, y = med_diff))+
-  geom_line(color = "69b3a2")+
-  geom_point(color = "69b3a2", size = 2)+
+  geom_line(color = "69b3a2")+  
   theme_minimal()+
-  ylim(c(-1000, 200))
+  labs(title = "The averrage runoff") +
+  xlab("year") +
+  ylab("Median of runoff [kg/s]") +
+  theme(plot.title = element_text(size = 20, hjust = 0.5),
+        legend.title = element_text(size = 10, vjust = 1),
+        legend.text = element_text(size = 8, vjust = 0.5))
+
+ggplot(data = data_by_year, mapping = aes(x = year, y = med_snow))+
+  geom_point()+
+  geom_line(color = "69b3a2")+  
+  theme_minimal()+
+  labs(title = "The averrage snowfall") +
+  xlab("year") +
+  ylab("Median of snowfall [kg/s]") +
+  theme(plot.title = element_text(size = 20, hjust = 0.5),
+        legend.title = element_text(size = 10, vjust = 1),
+        legend.text = element_text(size = 8, vjust = 0.5))
+
+
+
+data$year <- as.factor(data$year)
+ggplot(data = data) + 
+  geom_line(aes(x = month, y = diff, color = year))+ 
+  scale_x_continuous(breaks = 1:12)+
+  theme_minimal()+
+  labs(title = "The mass balance of greenland ice sheet")+
+  xlab("month") +
+  ylab("Net balance for all months [kg/s]") +
+  theme(plot.title = element_text(size = 20, hjust = 0.5),
+        legend.title = element_text(size = 12, vjust = 1),
+        legend.text = element_text(size = 8, vjust = 0.75))
+
+data$year <- as.factor(data$year)
+ggplot(data = data) + 
+  geom_line(aes(x = month, y = diff, color = year))+ 
+  scale_x_continuous(breaks = 1:12)+
+  theme_minimal()+
+  labs(title = "The mass balance of greenland ice sheet")+
+  xlab("month") +
+  ylab("Net balance for all months [kg/s]") +
+  theme(plot.title = element_text(size = 20, hjust = 0.5),
+        legend.title = element_text(size = 12, vjust = 1),
+        legend.text = element_text(size = 8, vjust = 0.75))
+
+
+
+data_5 <- filter(data, year %in% 
+                   c(2000:2005)) 
+data_10 <- filter(data, year %in% 
+                    c(2006:2010)) 
+data_15 <- filter(data, year %in% 
+                    c(2011:2015))
+data_20 <- filter(data, year %in% 
+                    c(2016:2020))
+
+ggplot(data = data_5) + 
+  geom_line(aes(x = month, y = diff, color = year))+ 
+  scale_x_continuous(breaks = 1:12)+
+  theme_minimal()+
+  labs(title = "The mass balance of greenland ice sheet")+
+  xlab("month") +
+  ylab("Net balance for all months [kg/s]") +
+  theme(plot.title = element_text(size = 20, hjust = 0.5),
+        legend.title = element_text(size = 12, vjust = 1),
+        legend.text = element_text(size = 8, vjust = 0.75))
+
+ggplot(data = data_10) + 
+  geom_line(aes(x = month, y = diff, color = year))+ 
+  scale_x_continuous(breaks = 1:12)+
+  theme_minimal()+
+  labs(title = "The mass balance of greenland ice sheet")+
+  xlab("month") +
+  ylab("Net balance for all months [kg/s]") +
+  theme(plot.title = element_text(size = 20, hjust = 0.5),
+        legend.title = element_text(size = 12, vjust = 1),
+        legend.text = element_text(size = 8, vjust = 0.75))
+
+ggplot(data = data_15) + 
+  geom_line(aes(x = month, y = diff, color = year))+ 
+  scale_x_continuous(breaks = 1:12)+
+  theme_minimal()+
+  labs(title = "The mass balance of greenland ice sheet")+
+  xlab("month") +
+  ylab("Net balance for all months [kg/s]") +
+  theme(plot.title = element_text(size = 20, hjust = 0.5),
+        legend.title = element_text(size = 12, vjust = 1),
+        legend.text = element_text(size = 8, vjust = 0.75))
+
+ggplot(data = data_20) + 
+  geom_line(aes(x = month, y = diff, color = year))+ 
+  scale_x_continuous(breaks = 1:12)+
+  theme_minimal()+
+  labs(title = "The mass balance of greenland ice sheet")+
+  xlab("month") +
+  ylab("Net balance for all months [kg/s]") +
+  theme(plot.title = element_text(size = 20, hjust = 0.5),
+        legend.title = element_text(size = 12, vjust = 1),
+        legend.text = element_text(size = 8, vjust = 0.75))
+
+data_years <- filter(data, year %in% 
+                       c(2003, 2005, 2008, 2011, 2012, 2018))
+
+ggplot(data = data_years) + 
+  geom_line(aes(x = month, y = diff, color = year))+ 
+  scale_x_continuous(breaks = 1:12)+
+  theme_minimal()+
+  labs(title = "The mass balance of greenland ice sheet")+
+  xlab("month") +
+  ylab("Net balance for all months [kg/s]") +
+  theme(plot.title = element_text(size = 20, hjust = 0.5),
+        legend.title = element_text(size = 12, vjust = 1),
+        legend.text = element_text(size = 8, vjust = 0.75))
+
